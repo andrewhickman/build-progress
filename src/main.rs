@@ -5,7 +5,7 @@ use std::process;
 
 use structopt::StructOpt;
 
-type Error = Box<dyn std::error::Error>;
+type Error = failure::Error;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, StructOpt)]
@@ -23,14 +23,21 @@ fn main() {
 
     log::trace!("Options: {:#?}", opts);
 
-
     let code = match cmd::run(&opts.cmd) {
         Ok(code) => code,
         Err(err) => {
-            log::error!("Error: {}", err);
+            log::error!("Error: {}", fmt_error(&err));
             3
         }
     };
 
     process::exit(code)
+}
+
+fn fmt_error(err: &Error) -> String {
+    let mut pretty = err.to_string();
+    for cause in err.iter_causes() {
+        pretty.push_str(&format!("\ncaused by: {}", cause));
+    }
+    pretty
 }
