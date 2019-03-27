@@ -1,0 +1,15 @@
+[package]
+name = "build-progress"
+version = "0.1.0"
+authors = ["Andrew Hickman <andrew.hickman1@sky.com>"]
+edition = "2018"
+
+[[bin]]
+path = "src/main.rs"
+name = "bp"
+
+[dependencies]
+grep-cli = "0.1.1"
+log = { version = "0.4.6", features = ["std"] }
+structopt = "0.2.15"
+termcolor = "1.0.4"
