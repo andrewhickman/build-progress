@@ -4,7 +4,8 @@ use std::io::Write;
 use crypto_hash::{Algorithm, Hasher};
 
 pub fn hash<H>(data: H) -> String
-where H: Hash
+where
+    H: Hash,
 {
     let mut hasher = Sha256(Hasher::new(Algorithm::SHA256));
     data.hash(&mut hasher);
