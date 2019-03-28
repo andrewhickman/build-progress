@@ -11,6 +11,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, StructOpt)]
 #[structopt(raw(setting = "structopt::clap::AppSettings::TrailingVarArg"))]
+#[structopt(raw(setting = "structopt::clap::AppSettings::UnifiedHelpMessage"))]
 struct Opts {
     #[structopt(flatten)]
     logger: logger::Opts,
