@@ -1,12 +1,12 @@
 use std::time::Duration;
-use std::io::BufRead;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-pub fn diff<R>(reader: ) 
-where R: BufRead
-{
+use crate::Result;
 
+pub fn read_line(line: Vec<u8>) -> Result<()> {
+    println!("{}", String::from_utf8_lossy(&line));
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -16,7 +16,7 @@ struct Line {
     timestamp: Duration,
 }
 
-fn as_base64<T, S>(key: &T, serializer: S) -> Result<S::Ok, S::Error>
+fn as_base64<T, S>(key: &T, serializer: S) -> std::result::Result<S::Ok, S::Error>
 where
     T: AsRef<[u8]>,
     S: Serializer,
@@ -24,7 +24,7 @@ where
     serializer.serialize_str(&base64::encode(key.as_ref()))
 }
 
-fn from_base64<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+fn from_base64<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
 where
     D: Deserializer<'de>,
 {

@@ -1,10 +1,21 @@
 use console::style;
-use log::{Log, SetLoggerError};
+use log::Log;
 use structopt::StructOpt;
 
-pub fn init(opts: Opts) -> Result<(), SetLoggerError> {
+use encoding::all::UTF_8;
+use encoding::{decode, DecoderTrap};
+
+use crate::Result;
+
+pub fn init(opts: Opts) {
     log::set_max_level(opts.level_filter());
-    log::set_logger(&Logger)
+    log::set_logger(&Logger).unwrap();
+}
+
+pub fn log_line(line: Vec<u8>) -> Result<()> {
+    let message = decode(&line, DecoderTrap::Replace, UTF_8).0.unwrap();
+    log::info!("{}", message);
+    Ok(())
 }
 
 struct Logger;

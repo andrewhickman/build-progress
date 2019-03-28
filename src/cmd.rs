@@ -1,13 +1,33 @@
 use std::ffi::OsString;
 use std::fmt;
+use std::io::{self, prelude::*, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus};
+use std::process::{Command, Stdio, ExitStatus};
 
 use failure::ResultExt;
+use futures::{Future, Poll, Stream};
 use structopt::StructOpt;
+use tokio_io::{try_nb, AsyncRead};
+use tokio_process::CommandExt;
 
 use crate::hash::hash;
 use crate::Result;
+
+pub fn run<O, E>(opts: &Opts, out: O, err: E) -> Result<i32>
+where
+    O: FnMut(Vec<u8>) -> Result<()>,
+    E: FnMut(Vec<u8>) -> Result<()>,
+{
+    let command = CommandOptions::new(opts)?;
+    log::trace!("Command: {:#?}", command);
+    let status = command.spawn(map_err(out), map_err(err))?.wait()?;
+    if status.success() {
+        Ok(0)
+    } else {
+        log::error!("Process '{}' exited unsuccessfully ({})", command, status);
+        Ok(status.code().unwrap_or(1))
+    }
+}
 
 #[derive(Debug, StructOpt)]
 pub struct Opts {
@@ -21,7 +41,7 @@ pub struct Opts {
         short = "w",
         default_value = ".",
         hide_default_value = true,
-        parse(from_os_str),
+        parse(from_os_str)
     )]
     workdir: PathBuf,
 }
@@ -47,24 +67,25 @@ impl<'a> CommandOptions<'a> {
         hash(self)
     }
 
-    fn status(&self) -> Result<ExitStatus> {
-        Ok(Command::new(&self.args[0])
+    fn spawn<O, E>(
+        &self,
+        out: O,
+        err: E,
+    ) -> Result<impl Future<Item = ExitStatus, Error = io::Error>>
+    where
+        O: FnMut(Vec<u8>) -> io::Result<()>,
+        E: FnMut(Vec<u8>) -> io::Result<()>,
+    {
+        let mut child = Command::new(&self.args[0])
             .args(&self.args[1..])
             .current_dir(&self.workdir)
-            .status()
-            .with_context(|_| format!("failed to execute process '{}'", self))?)
-    }
-}
-
-pub fn run(opts: &Opts) -> Result<i32> {
-    let command = CommandOptions::new(opts)?;
-    log::trace!("Command: {:#?}", command);
-    let status = command.status()?;
-    if status.success() {
-        Ok(0)
-    } else {
-        log::error!("Process '{}' exited unsuccessfully ({})", command, status);
-        Ok(status.code().unwrap_or(1))
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn_async()
+            .with_context(|_| format!("failed to execute process '{}'", self))?;
+        let stdout = lines(child.stdout().take().unwrap()).for_each(out);
+        let stderr = lines(child.stderr().take().unwrap()).for_each(err);
+        Ok(child.join3(stdout, stderr).map(|(status, (), ())| status))
     }
 }
 
@@ -76,4 +97,44 @@ impl<'a> fmt::Display for CommandOptions<'a> {
         }
         Ok(())
     }
+}
+
+struct Lines<R> {
+    rdr: R,
+}
+
+fn lines<R>(rdr: R) -> Lines<BufReader<R>>
+where
+    R: AsyncRead,
+{
+    Lines {
+        rdr: BufReader::new(rdr),
+    }
+}
+
+impl<R> Stream for Lines<R>
+where
+    R: AsyncRead + BufRead,
+{
+    type Item = Vec<u8>;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Vec<u8>>, io::Error> {
+        let mut line = Vec::new();
+        let n = try_nb!(self.rdr.read_until(b'\n', &mut line));
+        if n == 0 && line.len() == 0 {
+            return Ok(None.into());
+        }
+        if line.ends_with(b"\n") {
+            line.pop();
+            if line.ends_with(b"\r") {
+                line.pop();
+            }
+        }
+        Ok(Some(line).into())
+    }
+}
+
+fn map_err<A, R>(mut f: impl FnMut(A) -> Result<R>) -> impl FnMut(A) -> io::Result<R> {
+    move |a| f(a).map_err(|err| io::Error::new(io::ErrorKind::Other, err))
 }

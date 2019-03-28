@@ -20,3 +20,8 @@ console = "0.7.5"
 serde = { version = "1.0.89", features = ["derive"] }
 json = { package = "serde_json", version = "1.0.39" }
 base64 = "0.10.1"
+futures = "0.1.25"
+tokio-io = "0.1.12"
+tokio-process = "0.2.3"
+encoding = "0.2.33"
+tokio = "0.1.18"

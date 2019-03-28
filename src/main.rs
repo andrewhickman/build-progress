@@ -24,11 +24,11 @@ struct Opts {
 
 fn main() {
     let opts = Opts::from_args();
-    logger::init(opts.logger).unwrap();
+    logger::init(opts.logger);
 
     log::trace!("Options: {:#?}", opts);
 
-    let code = match cmd::run(&opts.cmd) {
+    let code = match cmd::run(&opts.cmd, diff::read_line, logger::log_line) {
         Ok(code) => code,
         Err(err) => {
             log::error!("Error: {}", fmt_error(&err));
