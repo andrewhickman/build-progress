@@ -1,8 +1,6 @@
-use std::borrow::Cow;
-use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::process::{Command, ExitStatus};
 
 use failure::ResultExt;

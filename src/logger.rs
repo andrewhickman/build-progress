@@ -1,18 +1,13 @@
-use std::io::{self, prelude::*};
-
-use grep_cli::is_tty_stderr;
+use console::style;
 use log::{Log, SetLoggerError};
 use structopt::StructOpt;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 pub fn init(opts: Opts) -> Result<(), SetLoggerError> {
     log::set_max_level(opts.level_filter());
-    log::set_boxed_logger(Box::new(Logger::new()))
+    log::set_logger(&Logger)
 }
 
-struct Logger {
-    writer: StandardStream,
-}
+struct Logger;
 
 #[derive(Copy, Clone, Debug, StructOpt)]
 pub struct Opts {
@@ -49,43 +44,25 @@ impl Opts {
 }
 
 impl Logger {
-    fn new() -> Self {
-        let color_choice = if is_tty_stderr() {
-            ColorChoice::Auto
-        } else {
-            ColorChoice::Never
-        };
-
-        Logger {
-            writer: StandardStream::stderr(color_choice),
-        }
-    }
-
-    fn write(&self, lvl: log::Level, msg: impl AsRef<str>) -> io::Result<()> {
+    fn write(&self, lvl: log::Level, msg: impl AsRef<str>) {
         const PAD: usize = 8;
 
-        let (prefix, color) = match lvl {
-            log::Level::Trace => ("trace", Color::White),
-            log::Level::Debug => ("debug", Color::Cyan),
-            log::Level::Info => ("info", Color::Magenta),
-            log::Level::Warn => ("warning", Color::Yellow),
-            log::Level::Error => ("error", Color::Red),
+        let prefix = match lvl {
+            log::Level::Trace => style("trace").white(),
+            log::Level::Debug => style("debug").cyan(),
+            log::Level::Info => style("info").magenta(),
+            log::Level::Warn => style("warning").yellow(),
+            log::Level::Error => style("error").red(),
         };
 
-        let mut writer = self.writer.lock();
         let mut lines = msg.as_ref().lines();
-
         if let Some(first) = lines.next() {
-            writer.set_color(ColorSpec::new().set_fg(Some(color)))?;
-            write!(writer, "{:>pad$}: ", prefix, pad = PAD)?;
-            writer.reset()?;
-            writeln!(writer, "{}", first)?;
+            eprint!("{:>pad$}: ", prefix, pad = PAD);
+            eprintln!("{}", first);
         }
         for line in lines {
-            writeln!(writer, "{:>pad$}  {}", "", line, pad = PAD)?;
+            eprintln!("{:>pad$}  {}", "", line, pad = PAD);
         }
-
-        Ok(())
     }
 }
 
@@ -96,12 +73,7 @@ impl Log for Logger {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(&record.metadata()) {
-            self.write(record.level(), &record.args().to_string())
-                .unwrap_or_else(|err| {
-                    if err.kind() != io::ErrorKind::BrokenPipe {
-                        panic!("error writing to stderr: {}", err);
-                    }
-                });
+            self.write(record.level(), &record.args().to_string());
         }
     }
 

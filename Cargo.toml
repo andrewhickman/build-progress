@@ -9,10 +9,11 @@ path = "src/main.rs"
 name = "bp"
 
 [dependencies]
-grep-cli = "0.1.1"
 log = { version = "0.4.6", features = ["std"] }
 structopt = "0.2.15"
 termcolor = "1.0.4"
 failure = "0.1.5"
 crypto-hash = "0.3.3"
 hex = "0.3.2"
+indicatif = "0.11.0"
+console = "0.7.5"
