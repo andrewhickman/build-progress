@@ -1,6 +1,7 @@
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::{self, File};
-use std::io::BufReader;
+use std::io::{BufReader};
+use std::mem::replace;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -11,10 +12,10 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use crate::Result;
 
 pub struct Writer {
-    start: Instant,
-    last: Instant,
-    orig: Orig,
-    curr: HashMap<Line, LineDataInit>,
+    file: File,
+    path: PathBuf,
+    orig: Option<OrigOutput>,
+    curr: CurrOutput,
 }
 
 impl Writer {
@@ -28,61 +29,12 @@ impl Writer {
         fs::create_dir_all(&dir)
             .with_context(|_| format!("failed to create directory '{}'", dir.display()))?;
 
-        let orig = Orig::new(&dir.join("orig").with_extension("json"))?;
-        let now = Instant::now();
-        Ok(Writer {
-            start: now,
-            last: now,
-            orig,
-            curr: HashMap::new(),
-        })
-    }
-
-    pub fn write_line(&mut self, data: Vec<u8>) -> Result<()> {
-        let dur = self.tick();
-        let line = Line { data };
-
-        self.orig.write_line(&line);
-
-        let seq = self.curr.len() as u32;
-        match self.curr.entry(line) {
-            Entry::Occupied(mut entry) => entry.get_mut().dup = true,
-            Entry::Vacant(entry) => {
-                entry.insert(LineDataInit {
-                    data: LineData { seq,
-                    dur },
-                    dup: false,
-                });
-            }
-        };
-
-        Ok(())
-    }
-
-    pub fn finish(&self) -> Result<()> {
-        unimplemented!()
-    }
-
-    fn tick(&mut self) -> Duration {
-        let now = Instant::now();
-        let dur = now - self.last;
-        self.last = now;
-        dur
-    }
-}
-
-struct Orig {
-    existing: Option<(Output, u32)>,
-    file: File,
-}
-
-impl Orig {
-    fn new(path: &Path) -> Result<Self> {
+        let path = dir.join("orig").with_extension("json");
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(path)
+            .open(&path)
             .with_context(|_| format!("failed to open or create file '{}'", path.display()))?;
 
         match file.try_lock_exclusive() {
@@ -98,48 +50,150 @@ impl Orig {
             }
         }
 
-        let meta = file
-            .metadata()
-            .with_context(|_| format!("failed to get metadata for file '{}'", path.display()))?;
-        let existing = if meta.len() == 0 {
-            None
-        } else {
-            let output = json::from_reader(BufReader::new(&file))
-                .with_context(|_| format!("failed to read JSON file '{}'", path.display()))?;
-            Some((output, 0))
-        };
-
-        Ok(Orig { existing, file })
+        let orig = OrigOutput::new(&file, &path)?;
+        Ok(Writer {
+            file,
+            path,
+            orig,
+            curr: CurrOutput::new(),
+        })
     }
 
-    fn write_line(&mut self, line: &Line) {
-        if let Some((ref output, ref mut seq)) = self.existing {
-            if let Some(entry) = output.lines.get(&line) {
-                if entry.seq == *seq {
-                    // TODO
-                } else if *seq <= entry.seq {
-                    *seq = entry.seq;
-                }
-
-                *seq += 1;
-            }
+    pub fn write_line(&mut self, line: Vec<u8>) -> Result<()> {
+        if let Some(ref mut orig) = self.orig {
+            orig.write_line(&line);
         }
+
+        self.curr.write_line(line);
+
+        Ok(())
     }
 
-    fn update(&mut self, new: HashMap<Line, LineDataInit>) -> Result<()> {
-        unimplemented!()
+    pub fn finish(&mut self) -> Result<()> {
+        self.curr.finish(&self.file, &self.path)
     }
 }
 
-impl Drop for Orig {
+impl Drop for Writer {
     fn drop(&mut self) {
         let _ = self.file.unlock();
     }
 }
 
+struct OrigOutput {
+    data: OutputData,
+    map: HashMap<Vec<u8>, u32>,
+    seq: u32,
+    elapsed: Duration,
+}
+
+impl OrigOutput {
+    fn new(file: &File, path: &Path) -> Result<Option<Self>> {
+        let meta = file
+            .metadata()
+            .with_context(|_| format!("failed to get metadata for file '{}'", path.display()))?;
+        if meta.len() == 0 {
+            Ok(None)
+        } else {
+            let mut data: OutputData = json::from_reader(BufReader::new(file))
+                .with_context(|_| format!("failed to read JSON file '{}'", path.display()))?;
+            let map = data
+                .lines
+                .iter_mut()
+                .enumerate()
+                .map(|(seq, line)| (replace(&mut line.data, Vec::new()), seq as u32))
+                .collect();
+            Ok(Some(OrigOutput {
+                data,
+                map,
+                seq: 0,
+                elapsed: Duration::from_secs(0),
+            }))
+        }
+    }
+
+    fn write_line(&mut self, line: &[u8]) {
+        if let Some(&seq) = self.map.get(line) {
+            if seq == self.seq {
+                self.elapsed += self.data.lines[seq as usize].dur;
+            } else if self.seq <= seq {
+                for idx in self.seq..=seq {
+                    self.elapsed += self.data.lines[idx as usize].dur;
+                }
+                self.seq = seq;
+            }
+
+            self.seq += 1;
+        }
+    }
+}
+
+struct CurrOutput {
+    data: OutputData,
+    map: HashMap<Vec<u8>, LineData>,
+    last: Instant,
+}
+
+struct LineData {
+    seq: u32,
+    dur: Duration,
+    dup: bool,
+}
+
+impl CurrOutput {
+    fn new() -> Self {
+        CurrOutput {
+            data: OutputData {
+                lines: Vec::new(),
+                total: Duration::from_secs(0),
+            },
+            map: HashMap::new(),
+            last: Instant::now(),
+        }
+    }
+
+    fn write_line(&mut self, line: Vec<u8>) {
+        let dur = self.tick();
+        let seq = self.data.lines.len() as u32;
+        match self.map.entry(line) {
+            Entry::Occupied(mut entry) => entry.get_mut().dup = true,
+            Entry::Vacant(entry) => {
+                self.data.lines.push(Line {
+                    data: Vec::new(),
+                    dur,
+                });
+                entry.insert(LineData {
+                    seq,
+                    dur,
+                    dup: false,
+                });
+            }
+        };
+    }
+
+    fn finish(&mut self, file: &File, path: &Path) -> Result<()> {
+        for (line, data) in self.map.drain() {
+            if !data.dup {
+                self.data.lines[data.seq as usize].data = line;
+            }
+        }
+
+        json::to_writer(file, &self.data)
+            .with_context(|_| format!("failed to write to file '{}'", path.display()))?;
+        Ok(())
+    }
+
+    fn tick(&mut self) -> Duration {
+        let now = Instant::now();
+        let dur = now - self.last;
+        self.last = now;
+        dur
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-struct Output {
-    lines: HashMap<Line, LineData>,
+struct OutputData {
+    lines: Vec<Line>,
     total: Duration,
 }
 
@@ -151,17 +205,7 @@ struct Line {
         deserialize_with = "from_base64"
     )]
     data: Vec<u8>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct LineData {
-    seq: u32,
     dur: Duration,
-}
-
-struct LineDataInit {
-    data: LineData,
-    dup: bool,
 }
 
 fn as_base64<T, S>(key: &T, serializer: S) -> std::result::Result<S::Ok, S::Error>
