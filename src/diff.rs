@@ -30,6 +30,7 @@ impl Writer {
             .with_context(|_| format!("failed to create directory '{}'", dir.display()))?;
 
         let path = dir.join("orig").with_extension("json");
+        log::debug!("Opening or creating data file '{}'", path.display());
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
