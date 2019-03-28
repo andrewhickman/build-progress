@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::fmt;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
 
 use failure::ResultExt;
@@ -20,7 +20,8 @@ pub struct Opts {
         long = "workdir",
         short = "w",
         default_value = ".",
-        parse(from_os_str)
+        hide_default_value = true,
+        parse(from_os_str),
     )]
     workdir: PathBuf,
 }

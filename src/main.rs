@@ -1,4 +1,5 @@
 mod cmd;
+mod diff;
 mod hash;
 mod logger;
 
@@ -10,8 +11,10 @@ type Error = failure::Error;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, StructOpt)]
+#[structopt(usage = "bp.exe [OPTIONS] <COMMAND>...")]
 #[structopt(raw(setting = "structopt::clap::AppSettings::TrailingVarArg"))]
 #[structopt(raw(setting = "structopt::clap::AppSettings::UnifiedHelpMessage"))]
+#[structopt(raw(setting = "structopt::clap::AppSettings::DisableVersion"))]
 struct Opts {
     #[structopt(flatten)]
     logger: logger::Opts,
@@ -29,7 +32,7 @@ fn main() {
         Ok(code) => code,
         Err(err) => {
             log::error!("Error: {}", fmt_error(&err));
-            3
+            17
         }
     };
 
