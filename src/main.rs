@@ -1,5 +1,6 @@
 mod cmd;
 mod logger;
+mod hash;
 
 use std::process;
 
