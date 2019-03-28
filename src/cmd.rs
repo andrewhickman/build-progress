@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, prelude::*, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, Stdio, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
 
 use failure::ResultExt;
 use futures::{Future, Poll, Stream};
@@ -10,17 +10,23 @@ use structopt::StructOpt;
 use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
 
+use crate::diff;
 use crate::hash::hash;
 use crate::Result;
 
-pub fn run<O, E>(opts: &Opts, out: O, err: E) -> Result<i32>
+pub fn run<E>(opts: &Opts, err: E) -> Result<i32>
 where
-    O: FnMut(Vec<u8>) -> Result<()>,
     E: FnMut(Vec<u8>) -> Result<()>,
 {
     let command = CommandOptions::new(opts)?;
     log::trace!("Command: {:#?}", command);
-    let status = command.spawn(map_err(out), map_err(err))?.wait()?;
+
+    let mut writer = diff::Writer::new(command.hash())?;
+    let status = command
+        .spawn(map_err(|line| writer.write_line(line)), map_err(err))?
+        .wait()?;
+    writer.finish()?;
+
     if status.success() {
         Ok(0)
     } else {

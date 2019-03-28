@@ -28,7 +28,7 @@ fn main() {
 
     log::trace!("Options: {:#?}", opts);
 
-    let code = match cmd::run(&opts.cmd, diff::read_line, logger::log_line) {
+    let code = match cmd::run(&opts.cmd, logger::log_line) {
         Ok(code) => code,
         Err(err) => {
             log::error!("Error: {}", fmt_error(&err));
