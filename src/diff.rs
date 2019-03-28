@@ -1,6 +1,6 @@
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::{self, File};
-use std::io::{BufReader};
+use std::io::{prelude::*, BufReader, SeekFrom};
 use std::mem::replace;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -71,6 +71,8 @@ impl Writer {
     }
 
     pub fn finish(&mut self) -> Result<()> {
+        self.file.seek(SeekFrom::Start(0))?;
+        self.file.set_len(0)?;
         self.curr.finish(&self.file, &self.path)
     }
 }
@@ -133,6 +135,7 @@ struct CurrOutput {
     data: OutputData,
     map: HashMap<Vec<u8>, LineData>,
     last: Instant,
+    start: Instant,
 }
 
 struct LineData {
@@ -143,13 +146,15 @@ struct LineData {
 
 impl CurrOutput {
     fn new() -> Self {
+        let now = Instant::now();
         CurrOutput {
             data: OutputData {
                 lines: Vec::new(),
                 total: Duration::from_secs(0),
             },
             map: HashMap::new(),
-            last: Instant::now(),
+            last: now,
+            start: now,
         }
     }
 
@@ -173,6 +178,7 @@ impl CurrOutput {
     }
 
     fn finish(&mut self, file: &File, path: &Path) -> Result<()> {
+        self.data.total = self.start.elapsed();
         for (line, data) in self.map.drain() {
             if !data.dup {
                 self.data.lines[data.seq as usize].data = line;
@@ -200,11 +206,7 @@ struct OutputData {
 
 #[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
 struct Line {
-    #[serde(
-        flatten,
-        serialize_with = "as_base64",
-        deserialize_with = "from_base64"
-    )]
+    #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     data: Vec<u8>,
     dur: Duration,
 }
