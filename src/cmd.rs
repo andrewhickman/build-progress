@@ -4,6 +4,7 @@ use std::io::{self, prelude::*, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 
+use console::style;
 use failure::ResultExt;
 use futures::{Future, Poll, Stream};
 use structopt::StructOpt;
@@ -15,9 +16,7 @@ use crate::logger;
 use crate::hash::hash;
 use crate::Result;
 
-pub fn run<E>(opts: &Opts, err: E) -> Result<i32>
-where
-    E: FnMut(Vec<u8>) -> Result<()>,
+pub fn run(opts: &Opts) -> Result<i32>
 {
     let command = CommandOptions::new(opts)?;
     log::trace!("Command: {:#?}", command);
@@ -27,12 +26,12 @@ where
         logger::start_progress(len);
     }
     let status = command
-        .spawn(map_err(|line| {
-            logger::log_bytes("stdout", &line);
+        .spawn(map_err(|line: Vec<u8>| {
+            log_proc_stdout(&line)?;
             writer.write_line(line)?;
             logger::set_progress_position(writer.completed());
             Ok(())
-        }), map_err(err))?
+        }), map_err(|line: Vec<u8>| log_proc_stderr(&line)))?
         .wait()?;
     logger::finish_progress();
     writer.finish()?;
@@ -149,6 +148,14 @@ where
         }
         Ok(Some(line).into())
     }
+}
+
+fn log_proc_stdout(line: &[u8]) -> Result<()> {
+    Ok(logger::log_bytes(style("stdout").green().bold(), &line))
+}
+
+fn log_proc_stderr(line: &[u8]) -> Result<()> {
+    Ok(logger::log_bytes(style("stderr").magenta().bold(), &line))
 }
 
 fn map_err<A, R>(mut f: impl FnMut(A) -> Result<R>) -> impl FnMut(A) -> io::Result<R> {
