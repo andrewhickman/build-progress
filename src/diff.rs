@@ -140,7 +140,6 @@ struct CurrOutput {
 
 struct LineData {
     seq: u32,
-    dur: Duration,
     dup: bool,
 }
 
@@ -170,7 +169,6 @@ impl CurrOutput {
                 });
                 entry.insert(LineData {
                     seq,
-                    dur,
                     dup: false,
                 });
             }
