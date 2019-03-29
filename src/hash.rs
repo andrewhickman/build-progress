@@ -16,7 +16,7 @@ struct Sha256(Hasher);
 
 impl Sha256 {
     fn finish(&mut self) -> String {
-        hex::encode(self.0.finish())
+        hex::encode(&self.0.finish()[..16])
     }
 }
 
