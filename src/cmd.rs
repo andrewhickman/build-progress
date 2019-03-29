@@ -10,6 +10,7 @@ use futures::{Future, Poll, Stream};
 use structopt::StructOpt;
 use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
+use indicatif::HumanDuration;
 
 use crate::diff;
 use crate::logger;
@@ -23,13 +24,14 @@ pub fn run(opts: &Opts) -> Result<i32>
 
     let mut writer = diff::Writer::new(command.hash())?;
     if let Some(len) = writer.len() {
-        logger::start_progress(len);
+        let msg = format!("{:#}", HumanDuration(len));
+        logger::start_progress(len.as_millis() as u64, &msg);
     }
     let status = command
         .spawn(map_err(|line: Vec<u8>| {
             log_proc_stdout(&line)?;
             writer.write_line(line)?;
-            logger::set_progress_position(writer.completed());
+            logger::set_progress_position(writer.completed().as_millis() as u64);
             Ok(())
         }), map_err(|line: Vec<u8>| log_proc_stderr(&line)))?
         .wait()?;

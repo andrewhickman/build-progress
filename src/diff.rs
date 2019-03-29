@@ -60,12 +60,12 @@ impl Writer {
         })
     }
 
-    pub fn len(&self) -> Option<u64> {
-        self.orig.as_ref().map(|orig| orig.data.total.as_millis() as u64)
+    pub fn len(&self) -> Option<Duration> {
+        self.orig.as_ref().map(|orig| orig.data.total)
     }
 
-    pub fn completed(&self) -> u64 {
-        self.orig.as_ref().map(|orig| orig.elapsed.as_millis() as u64).unwrap_or(0)
+    pub fn completed(&self) -> Duration {
+        self.orig.as_ref().map(|orig| orig.elapsed).unwrap_or_default()
     }
 
     pub fn write_line(&mut self, line: Vec<u8>) -> Result<()> {

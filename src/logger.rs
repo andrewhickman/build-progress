@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use console::{style, Term};
-use indicatif::{ProgressBar, ProgressDrawTarget};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use log::Log;
 use lazy_static::lazy_static;
 use structopt::StructOpt;
@@ -15,9 +15,10 @@ pub fn log_bytes<D, B>(prefix: D, bytes: B) where D: Display, B: AsRef<[u8]> {
     LOGGER.write(prefix, String::from_utf8_lossy(bytes.as_ref()))
 }
 
-pub fn start_progress(len: u64) {
+pub fn start_progress(len: u64, msg: &str) {
     LOGGER.progress.set_draw_target(ProgressDrawTarget::to_term(LOGGER.term.clone(), None));
     LOGGER.progress.set_length(len);
+    LOGGER.progress.set_message(msg);
 }
 
 pub fn set_progress_position(pos: u64) {
@@ -73,9 +74,13 @@ impl Opts {
 
 impl Logger {
     fn new() -> Self {
+        let progress = ProgressBar::hidden();
+        progress.set_style(ProgressStyle::default_bar()
+            .template("[{bar:64.white}] {elapsed}/{msg}")
+            .progress_chars("=> "));
         Logger {
             term: Term::stdout(),
-            progress: ProgressBar::hidden(),
+            progress,
         }
     }
 
