@@ -78,8 +78,8 @@ impl Logger {
 }
 
 impl Log for Logger {
-    fn enabled(&self, _: &log::Metadata) -> bool {
-        true
+    fn enabled(&self, meta: &log::Metadata) -> bool {
+        meta.target().starts_with("bp::")
     }
 
     fn log(&self, record: &log::Record) {
