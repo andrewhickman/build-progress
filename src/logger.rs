@@ -1,26 +1,36 @@
 use std::fmt::Display;
 
-use console::style;
+use console::{style, Term};
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use log::Log;
+use lazy_static::lazy_static;
 use structopt::StructOpt;
-
-use encoding::all::UTF_8;
-use encoding::{decode, DecoderTrap};
 
 pub fn init(opts: Opts) {
     log::set_max_level(opts.level_filter());
-    log::set_logger(&Logger).unwrap();
+    log::set_logger(&LOGGER as &Logger).unwrap();
 }
 
-pub fn log_proc_stderr(line: &[u8]) {
-    // Logger.write(style("stderr").magenta().bold(), decode_utf8(&line));
+pub fn log_bytes<D, B>(prefix: D, bytes: B) where D: Display, B: AsRef<[u8]> {
+    LOGGER.write(prefix, String::from_utf8_lossy(bytes.as_ref()))
 }
 
-pub fn log_proc_stdout(line: &[u8]) {
-    Logger.write(style("stdout").magenta().bold(), decode_utf8(&line));
+pub fn start_progress(len: u64) {
+    LOGGER.progress.set_draw_target(ProgressDrawTarget::to_term(LOGGER.term.clone(), None));
+    LOGGER.progress.set_length(len);
 }
 
-struct Logger;
+pub fn set_progress_position(pos: u64) {
+    LOGGER.progress.set_position(pos);
+}
+
+pub fn finish_progress() {
+    LOGGER.progress.finish();
+}
+
+lazy_static! {
+    static ref LOGGER: Logger = Logger::new();
+}
 
 #[derive(Copy, Clone, Debug, StructOpt)]
 pub struct Opts {
@@ -42,6 +52,11 @@ pub struct Opts {
     quiet: bool,
 }
 
+struct Logger {
+    term: Term,
+    progress: ProgressBar,
+}
+
 impl Opts {
     fn level_filter(self) -> log::LevelFilter {
         if self.quiet {
@@ -57,19 +72,39 @@ impl Opts {
 }
 
 impl Logger {
-    fn write<D>(&self, prefix: D, msg: impl AsRef<str>) 
+    fn new() -> Self {
+        Logger {
+            term: Term::stdout(),
+            progress: ProgressBar::hidden(),
+        }
+    }
+
+    fn write<D, S>(&self, prefix: D, msg: S)
     where
-        D: Display
+        D: Display,
+        S: AsRef<str>
+    {
+        if self.progress.is_hidden() {
+            self.write_with(prefix, msg, |s| { self.term.write_line(&s).ok(); });
+        } else {
+            self.write_with(prefix, msg, |s| self.progress.println(s));
+        }
+    }
+
+    fn write_with<D, S, F>(&self, prefix: D, msg: S, mut writeln: F)
+    where
+        D: Display,
+        S: AsRef<str>,
+        F: FnMut(String)
     {
         const PAD: usize = 8;
 
         let mut lines = msg.as_ref().lines();
         if let Some(first) = lines.next() {
-            eprint!("{:>pad$.pad$}: ", prefix, pad = PAD);
-            eprintln!("{}", first);
+            writeln(format!("{:>pad$.pad$}: {}", prefix, first, pad = PAD));
         }
         for line in lines {
-            eprintln!("{:>pad$}  {}", "", line, pad = PAD);
+            writeln(format!("{:>pad$}  {}", "", line, pad = PAD));
         }
     }
 }
@@ -94,9 +129,4 @@ impl Log for Logger {
     }
 
     fn flush(&self) {}
-}
-
-fn decode_utf8(bytes: &[u8]) -> String {
-    // decoding cannot fail since we use `DecoderTrap::Replace`.
-    decode(&bytes, DecoderTrap::Replace, UTF_8).0.unwrap()
 }

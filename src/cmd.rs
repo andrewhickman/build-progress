@@ -7,11 +7,11 @@ use std::process::{Command, ExitStatus, Stdio};
 use failure::ResultExt;
 use futures::{Future, Poll, Stream};
 use structopt::StructOpt;
-use indicatif::{ProgressBar, ProgressDrawTarget};
 use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
 
 use crate::diff;
+use crate::logger;
 use crate::hash::hash;
 use crate::Result;
 
@@ -23,19 +23,18 @@ where
     log::trace!("Command: {:#?}", command);
 
     let mut writer = diff::Writer::new(command.hash())?;
-    let pb = writer.len().map(|len| ProgressBar::with_draw_target(len, ProgressDrawTarget::stdout()));
+    if let Some(len) = writer.len() {
+        logger::start_progress(len);
+    }
     let status = command
         .spawn(map_err(|line| {
+            logger::log_bytes("stdout", &line);
             writer.write_line(line)?;
-            if let Some(pb) = &pb {
-                pb.set_position(writer.completed());
-            }
+            logger::set_progress_position(writer.completed());
             Ok(())
         }), map_err(err))?
         .wait()?;
-    if let Some(pb) = &pb {
-        pb.finish();
-    }
+    logger::finish_progress();
     writer.finish()?;
 
     if status.success() {
