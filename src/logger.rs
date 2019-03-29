@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use console::style;
 use log::Log;
 use structopt::StructOpt;
@@ -5,17 +7,17 @@ use structopt::StructOpt;
 use encoding::all::UTF_8;
 use encoding::{decode, DecoderTrap};
 
-use crate::Result;
-
 pub fn init(opts: Opts) {
     log::set_max_level(opts.level_filter());
     log::set_logger(&Logger).unwrap();
 }
 
-pub fn log_line(line: Vec<u8>) -> Result<()> {
-    let message = decode(&line, DecoderTrap::Replace, UTF_8).0.unwrap();
-    log::info!("{}", message);
-    Ok(())
+pub fn log_proc_stderr(line: &[u8]) {
+    // Logger.write(style("stderr").magenta().bold(), decode_utf8(&line));
+}
+
+pub fn log_proc_stdout(line: &[u8]) {
+    Logger.write(style("stdout").magenta().bold(), decode_utf8(&line));
 }
 
 struct Logger;
@@ -55,20 +57,15 @@ impl Opts {
 }
 
 impl Logger {
-    fn write(&self, lvl: log::Level, msg: impl AsRef<str>) {
+    fn write<D>(&self, prefix: D, msg: impl AsRef<str>) 
+    where
+        D: Display
+    {
         const PAD: usize = 8;
-
-        let prefix = match lvl {
-            log::Level::Trace => style("trace").white(),
-            log::Level::Debug => style("debug").cyan(),
-            log::Level::Info => style("info").magenta(),
-            log::Level::Warn => style("warning").yellow(),
-            log::Level::Error => style("error").red(),
-        };
 
         let mut lines = msg.as_ref().lines();
         if let Some(first) = lines.next() {
-            eprint!("{:>pad$}: ", prefix, pad = PAD);
+            eprint!("{:>pad$.pad$}: ", prefix, pad = PAD);
             eprintln!("{}", first);
         }
         for line in lines {
@@ -84,9 +81,22 @@ impl Log for Logger {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(&record.metadata()) {
-            self.write(record.level(), &record.args().to_string());
+            let prefix = match record.level() {
+                log::Level::Trace => style("trace").white(),
+                log::Level::Debug => style("debug").cyan(),
+                log::Level::Info => style("info").blue(),
+                log::Level::Warn => style("warning").yellow(),
+                log::Level::Error => style("error").red(),
+            }.bold();
+
+            self.write(prefix, &record.args().to_string());
         }
     }
 
     fn flush(&self) {}
+}
+
+fn decode_utf8(bytes: &[u8]) -> String {
+    // decoding cannot fail since we use `DecoderTrap::Replace`.
+    decode(&bytes, DecoderTrap::Replace, UTF_8).0.unwrap()
 }

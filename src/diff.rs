@@ -60,6 +60,14 @@ impl Writer {
         })
     }
 
+    pub fn len(&self) -> Option<u64> {
+        self.orig.as_ref().map(|orig| orig.data.total.as_millis() as u64)
+    }
+
+    pub fn completed(&self) -> u64 {
+        self.orig.as_ref().map(|orig| orig.elapsed.as_millis() as u64).unwrap_or(0)
+    }
+
     pub fn write_line(&mut self, line: Vec<u8>) -> Result<()> {
         if let Some(ref mut orig) = self.orig {
             orig.write_line(&line);
