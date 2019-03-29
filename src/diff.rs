@@ -1,3 +1,4 @@
+use std::fmt;
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::{self, File};
 use std::io::{prelude::*, BufReader, SeekFrom};
@@ -91,6 +92,7 @@ impl Drop for Writer {
     }
 }
 
+#[derive(Debug)]
 struct OrigOutput {
     data: OutputData,
     map: HashMap<Vec<u8>, u32>,
@@ -108,6 +110,7 @@ impl OrigOutput {
         } else {
             let mut data: OutputData = json::from_reader(BufReader::new(file))
                 .with_context(|_| format!("failed to read JSON file '{}'", path.display()))?;
+            log::trace!("Original output: {:#?}", data);
             let map = data
                 .lines
                 .iter_mut()
@@ -125,13 +128,10 @@ impl OrigOutput {
 
     fn write_line(&mut self, line: &[u8]) {
         if let Some(&seq) = self.map.get(line) {
-            if seq == self.seq {
-                self.elapsed += self.data.lines[seq as usize].dur;
-            } else if self.seq <= seq {
-                for idx in self.seq..=seq {
-                    self.elapsed += self.data.lines[idx as usize].dur;
-                }
-                self.seq = seq;
+            if self.seq <= seq {
+                log::trace!("Recognized line '{}'", String::from_utf8_lossy(line));
+                self.elapsed = self.data.lines[seq as usize].dur;
+                log::trace!("Elapsed: {:#}", indicatif::HumanDuration(self.elapsed));
             }
 
             self.seq += 1;
@@ -139,13 +139,14 @@ impl OrigOutput {
     }
 }
 
+#[derive(Debug)]
 struct CurrOutput {
     data: OutputData,
     map: HashMap<Vec<u8>, LineData>,
-    last: Instant,
     start: Instant,
 }
 
+#[derive(Debug)]
 struct LineData {
     seq: u32,
     dup: bool,
@@ -153,20 +154,18 @@ struct LineData {
 
 impl CurrOutput {
     fn new() -> Self {
-        let now = Instant::now();
         CurrOutput {
             data: OutputData {
                 lines: Vec::new(),
                 total: Duration::from_secs(0),
             },
             map: HashMap::new(),
-            last: now,
-            start: now,
+            start: Instant::now(),
         }
     }
 
     fn write_line(&mut self, line: Vec<u8>) {
-        let dur = self.tick();
+        let dur = self.start.elapsed();
         let seq = self.data.lines.len() as u32;
         match self.map.entry(line) {
             Entry::Occupied(mut entry) => entry.get_mut().dup = true,
@@ -190,17 +189,11 @@ impl CurrOutput {
                 self.data.lines[data.seq as usize].data = line;
             }
         }
+        self.data.lines.retain(|line| !line.data.is_empty());
 
         json::to_writer(file, &self.data)
             .with_context(|_| format!("failed to write to file '{}'", path.display()))?;
         Ok(())
-    }
-
-    fn tick(&mut self) -> Duration {
-        let now = Instant::now();
-        let dur = now - self.last;
-        self.last = now;
-        dur
     }
 }
 
@@ -210,11 +203,20 @@ struct OutputData {
     total: Duration,
 }
 
-#[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Hash, Eq, PartialEq)]
 struct Line {
     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
     data: Vec<u8>,
     dur: Duration,
+}
+
+impl fmt::Debug for Line {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Line")
+            .field("data", &String::from_utf8_lossy(&self.data))
+            .field("dur", &self.dur)
+            .finish()
+    }
 }
 
 fn as_base64<T, S>(key: &T, serializer: S) -> std::result::Result<S::Ok, S::Error>
