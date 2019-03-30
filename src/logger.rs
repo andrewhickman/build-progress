@@ -12,7 +12,9 @@ pub fn init(opts: Opts) {
 }
 
 pub fn log_bytes<D, B>(prefix: D, bytes: B) where D: Display, B: AsRef<[u8]> {
-    LOGGER.write(prefix, String::from_utf8_lossy(bytes.as_ref()))
+    if log::max_level() >= log::Level::Info {
+        LOGGER.write(prefix, String::from_utf8_lossy(bytes.as_ref()))
+    }
 }
 
 pub fn start_progress(len: u64, msg: &str) {
@@ -49,7 +51,7 @@ pub struct Opts {
         global = true
     )]
     trace: bool,
-    #[structopt(long, short, help = "Disable all logging to stderr", global = true)]
+    #[structopt(long, short, help = "Disable logging", global = true)]
     quiet: bool,
 }
 
