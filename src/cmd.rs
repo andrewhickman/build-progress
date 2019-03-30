@@ -111,7 +111,7 @@ impl<'a> CommandOptions<'a> {
 
         Ok(CommandOptions {
             args: &opts.args,
-            workdir: opts.workdir.canonicalize().with_context(|_| {
+            workdir: dunce::canonicalize(&opts.workdir).with_context(|_| {
                 format!("failed to canonicalize path '{}'", opts.workdir.display())
             })?,
         })
