@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt;
+use std::env;
 use std::io::{self, prelude::*, BufReader};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -13,13 +15,14 @@ use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
 use indicatif::HumanDuration;
 
+use crate::config::Config;
 use crate::diff;
 use crate::logger;
 use crate::hash::hash;
 use crate::Result;
 
-pub fn run(opts: &Opts) -> Result<i32> {
-    let command = CommandOptions::new(opts)?;
+pub fn run(opts: &Opts, config: Config) -> Result<i32> {
+    let command = CommandOptions::new(opts, config)?;
     log::trace!("Command: {:#?}", command);
 
     let dir = if let Some(dir) = dirs::data_dir() {
@@ -67,7 +70,7 @@ pub fn run(opts: &Opts) -> Result<i32> {
     writer.finish()?;
 
     if !status.success() {
-        log::error!("Process '{}' exited unsuccessfully ({})", command, status);
+        log::error!("process '{}' exited unsuccessfully ({})", command, status);
     }
     log::info!("Output log file is located at '{}'", output_path.display());
 
@@ -103,17 +106,21 @@ pub struct Opts {
 pub struct CommandOptions<'a> {
     args: &'a [OsString],
     workdir: PathBuf,
+    env: BTreeMap<String, OsString>,
 }
 
 impl<'a> CommandOptions<'a> {
-    fn new(opts: &'a Opts) -> Result<Self> {
+    fn new(opts: &'a Opts, config: Config) -> Result<Self> {
         debug_assert!(!opts.args.is_empty());
+
+        let env = config.env.into_iter().filter_map(|key| env::var_os(&key).map(|val| (key, val))).collect();
 
         Ok(CommandOptions {
             args: &opts.args,
             workdir: dunce::canonicalize(&opts.workdir).with_context(|_| {
                 format!("failed to canonicalize path '{}'", opts.workdir.display())
             })?,
+            env,
         })
     }
 

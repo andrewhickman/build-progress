@@ -1,4 +1,5 @@
 mod cmd;
+mod config;
 mod diff;
 mod hash;
 mod logger;
@@ -19,24 +20,30 @@ struct Opts {
     #[structopt(flatten)]
     logger: logger::Opts,
     #[structopt(flatten)]
+    config: config::Opts,
+    #[structopt(flatten)]
     cmd: cmd::Opts,
 }
 
 fn main() {
-    let opts = Opts::from_args();
-    logger::init(opts.logger);
-
-    log::trace!("Options: {:#?}", opts);
-
-    let code = match cmd::run(&opts.cmd) {
+    process::exit(match run() {
         Ok(code) => code,
         Err(err) => {
-            log::error!("Error: {}", fmt_error(&err));
+            log::error!("{}", fmt_error(&err));
             17
         }
-    };
+    })
+}
 
-    process::exit(code)
+fn run() -> Result<i32> {
+    let opts = Opts::from_args();
+    logger::init(opts.logger);
+    log::trace!("Options: {:#?}", opts);
+
+    let config = config::read(&opts.config)?;
+    log::trace!("Config: {:#?}", config);
+
+    cmd::run(&opts.cmd, config)
 }
 
 fn fmt_error(err: &Error) -> String {
