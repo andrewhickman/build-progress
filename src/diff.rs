@@ -20,16 +20,7 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new(hash: String) -> Result<Self> {
-        let dir = if let Some(dir) = dirs::data_dir() {
-            dir.join("build-progress").join(hash)
-        } else {
-            bail!("failed to get user's data directory");
-        };
-
-        fs::create_dir_all(&dir)
-            .with_context(|_| format!("failed to create directory '{}'", dir.display()))?;
-
+    pub fn new(dir: &Path) -> Result<Self> {
         let path = dir.join("orig").with_extension("json");
         log::debug!("Opening or creating data file '{}'", path.display());
         let file = fs::OpenOptions::new()
