@@ -2,8 +2,8 @@ use std::fmt::Display;
 
 use console::{style, Term};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use log::Log;
 use lazy_static::lazy_static;
+use log::Log;
 use structopt::StructOpt;
 
 pub fn init(opts: Opts) {
@@ -11,14 +11,20 @@ pub fn init(opts: Opts) {
     log::set_logger(&LOGGER as &Logger).unwrap();
 }
 
-pub fn log_bytes<D, B>(prefix: D, bytes: B) where D: Display, B: AsRef<[u8]> {
+pub fn log_bytes<D, B>(prefix: D, bytes: B)
+where
+    D: Display,
+    B: AsRef<[u8]>,
+{
     if log::max_level() >= log::Level::Info {
         LOGGER.write(prefix, String::from_utf8_lossy(bytes.as_ref()))
     }
 }
 
 pub fn start_progress(len: u64, msg: &str) {
-    LOGGER.progress.set_draw_target(ProgressDrawTarget::to_term(LOGGER.term.clone(), None));
+    LOGGER
+        .progress
+        .set_draw_target(ProgressDrawTarget::to_term(LOGGER.term.clone(), None));
     LOGGER.progress.set_length(len);
     LOGGER.progress.set_message(msg);
 }
@@ -77,9 +83,11 @@ impl Opts {
 impl Logger {
     fn new() -> Self {
         let progress = ProgressBar::hidden();
-        progress.set_style(ProgressStyle::default_bar()
-            .template("[{bar:64.white}] {elapsed}/{msg}")
-            .progress_chars("=> "));
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("[{bar:64.white}] {elapsed}/{msg}")
+                .progress_chars("=> "),
+        );
         Logger {
             term: Term::stdout(),
             progress,
@@ -89,10 +97,12 @@ impl Logger {
     fn write<D, S>(&self, prefix: D, msg: S)
     where
         D: Display,
-        S: AsRef<str>
+        S: AsRef<str>,
     {
         if self.progress.is_hidden() {
-            self.write_with(prefix, msg, |s| { self.term.write_line(&s).ok(); });
+            self.write_with(prefix, msg, |s| {
+                self.term.write_line(&s).ok();
+            });
         } else {
             self.write_with(prefix, msg, |s| self.progress.println(s));
         }
@@ -102,7 +112,7 @@ impl Logger {
     where
         D: Display,
         S: AsRef<str>,
-        F: FnMut(String)
+        F: FnMut(String),
     {
         const PAD: usize = 8;
 
@@ -129,7 +139,8 @@ impl Log for Logger {
                 log::Level::Info => style("info").blue(),
                 log::Level::Warn => style("warning").yellow(),
                 log::Level::Error => style("error").red(),
-            }.bold();
+            }
+            .bold();
 
             self.write(prefix, &record.args().to_string());
         }

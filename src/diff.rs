@@ -1,5 +1,5 @@
-use std::fmt;
 use std::collections::hash_map::{Entry, HashMap};
+use std::fmt;
 use std::fs::{self, File};
 use std::io::{prelude::*, BufReader, SeekFrom};
 use std::mem::replace;
@@ -57,7 +57,10 @@ impl Writer {
     }
 
     pub fn completed(&self) -> Duration {
-        self.orig.as_ref().map(|orig| orig.elapsed).unwrap_or_default()
+        self.orig
+            .as_ref()
+            .map(|orig| orig.elapsed)
+            .unwrap_or_default()
     }
 
     pub fn write_line(&mut self, line: Vec<u8>) -> Result<()> {
@@ -165,10 +168,7 @@ impl CurrOutput {
                     data: Vec::new(),
                     dur,
                 });
-                entry.insert(LineData {
-                    seq,
-                    dup: false,
-                });
+                entry.insert(LineData { seq, dup: false });
             }
         };
     }

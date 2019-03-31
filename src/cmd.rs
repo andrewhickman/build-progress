@@ -1,24 +1,24 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::env;
-use std::io::{self, prelude::*, BufReader};
 use std::fs::{self, File};
+use std::io::{self, prelude::*, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 
 use console::style;
 use failure::{bail, ResultExt};
 use futures::{Future, Poll, Stream};
+use indicatif::HumanDuration;
 use structopt::StructOpt;
 use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
-use indicatif::HumanDuration;
 
 use crate::config::Config;
 use crate::diff;
-use crate::logger;
 use crate::hash::hash;
+use crate::logger;
 use crate::Result;
 
 pub fn run(opts: &Opts, config: Config) -> Result<i32> {
@@ -62,9 +62,7 @@ pub fn run(opts: &Opts, config: Config) -> Result<i32> {
         Ok(())
     });
 
-    let status = command
-        .spawn(handle_stdout, handle_stderr)?
-        .wait()?;
+    let status = command.spawn(handle_stdout, handle_stderr)?.wait()?;
 
     logger::finish_progress();
     writer.finish()?;
@@ -93,12 +91,7 @@ pub struct Opts {
     )]
     workdir: PathBuf,
     /// The file to pipe the command to, relative to workdir
-    #[structopt(
-        name = "OUTPUT",
-        long = "output",
-        short = "o",
-        parse(from_os_str)
-    )]
+    #[structopt(name = "OUTPUT", long = "output", short = "o", parse(from_os_str))]
     output: Option<PathBuf>,
 }
 
@@ -113,7 +106,11 @@ impl<'a> CommandOptions<'a> {
     fn new(opts: &'a Opts, config: Config) -> Result<Self> {
         debug_assert!(!opts.args.is_empty());
 
-        let env = config.env.into_iter().filter_map(|key| env::var_os(&key).map(|val| (key, val))).collect();
+        let env = config
+            .env
+            .into_iter()
+            .filter_map(|key| env::var_os(&key).map(|val| (key, val)))
+            .collect();
 
         Ok(CommandOptions {
             args: &opts.args,
@@ -191,7 +188,8 @@ where
 }
 
 fn write_output(line: &[u8], mut file: &File, path: &Path) -> Result<()> {
-    Ok(file.write_all(line)
+    Ok(file
+        .write_all(line)
         .with_context(|_| format!("failed to write to file '{}'", path.display()))?)
 }
 
