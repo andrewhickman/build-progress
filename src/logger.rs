@@ -11,13 +11,12 @@ pub fn init(opts: Opts) {
     log::set_logger(&LOGGER as &Logger).unwrap();
 }
 
-pub fn log_bytes<D, B>(prefix: D, bytes: B)
+pub fn log_bytes<B>(bytes: B)
 where
-    D: Display,
     B: AsRef<[u8]>,
 {
     if log::max_level() >= log::Level::Info {
-        LOGGER.write(prefix, String::from_utf8_lossy(bytes.as_ref()))
+        LOGGER.write_raw(String::from_utf8_lossy(bytes.as_ref()))
     }
 }
 
@@ -99,29 +98,22 @@ impl Logger {
         D: Display,
         S: AsRef<str>,
     {
-        if self.progress.is_hidden() {
-            self.write_with(prefix, msg, |s| {
-                self.term.write_line(&s).ok();
-            });
-        } else {
-            self.write_with(prefix, msg, |s| self.progress.println(s));
-        }
-    }
-
-    fn write_with<D, S, F>(&self, prefix: D, msg: S, mut writeln: F)
-    where
-        D: Display,
-        S: AsRef<str>,
-        F: FnMut(String),
-    {
         const PAD: usize = 8;
 
         let mut lines = msg.as_ref().lines();
         if let Some(first) = lines.next() {
-            writeln(format!("{:>pad$.pad$}: {}", prefix, first, pad = PAD));
+            self.write_raw(format!("{:>pad$.pad$}: {}", prefix, first, pad = PAD));
         }
         for line in lines {
-            writeln(format!("{:>pad$}  {}", "", line, pad = PAD));
+            self.write_raw(format!("{:>pad$}  {}", "", line, pad = PAD));
+        }
+    }
+
+    fn write_raw<S>(&self, msg: S) where S: Into<String> + AsRef<str> {
+        if self.progress.is_hidden() {
+            self.term.write_line(msg.as_ref()).ok();
+        } else {
+            self.progress.println(msg);
         }
     }
 }

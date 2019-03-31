@@ -6,8 +6,6 @@ use std::fs::{self, File};
 use std::io::{self, prelude::*, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-
-use console::style;
 use failure::{bail, ResultExt};
 use futures::{Future, Poll, Stream};
 use indicatif::HumanDuration;
@@ -50,19 +48,13 @@ pub fn run(opts: &Opts, config: Config) -> Result<i32> {
 
     let handle_stdout = map_err(|line: Vec<u8>| {
         write_output(&line, &output, &output_path)?;
-        logger::log_bytes(style("stdout").green().bold(), &line);
+        logger::log_bytes(&line);
         writer.write_line(line)?;
         logger::set_progress_position(writer.completed().as_millis() as u64);
         Ok(())
     });
 
-    let handle_stderr = map_err(|line: Vec<u8>| {
-        write_output(&line, &output, &output_path)?;
-        logger::log_bytes(style("stderr").green().bold(), &line);
-        Ok(())
-    });
-
-    let status = command.spawn(handle_stdout, handle_stderr)?.wait()?;
+    let status = command.spawn(handle_stdout)?.wait()?;
 
     logger::finish_progress();
     writer.finish()?;
@@ -125,25 +117,22 @@ impl<'a> CommandOptions<'a> {
         hash(self)
     }
 
-    fn spawn<O, E>(
+    fn spawn<O>(
         &self,
         out: O,
-        err: E,
     ) -> Result<impl Future<Item = ExitStatus, Error = io::Error>>
     where
         O: FnMut(Vec<u8>) -> io::Result<()>,
-        E: FnMut(Vec<u8>) -> io::Result<()>,
     {
         let mut child = Command::new(&self.args[0])
             .args(&self.args[1..])
             .current_dir(&self.workdir)
-            .stderr(Stdio::piped())
+            .stderr(Stdio::inherit())
             .stdout(Stdio::piped())
             .spawn_async()
             .with_context(|_| format!("failed to execute process '{}'", self))?;
         let stdout = lines(child.stdout().take().unwrap()).for_each(out);
-        let stderr = lines(child.stderr().take().unwrap()).for_each(err);
-        Ok(child.join3(stdout, stderr).map(|(status, (), ())| status))
+        Ok(child.join(stdout).map(|(status, ())| status))
     }
 }
 
