@@ -72,16 +72,6 @@ pub struct Opts {
     /// The command to run
     #[structopt(name = "COMMAND", required = true, parse(from_os_str))]
     args: Vec<OsString>,
-    /// The directory to run the command in
-    #[structopt(
-        name = "WORKDIR",
-        long = "workdir",
-        short = "w",
-        default_value = ".",
-        hide_default_value = true,
-        parse(from_os_str)
-    )]
-    workdir: PathBuf,
     /// The file to pipe the command to, relative to workdir
     #[structopt(name = "OUTPUT", long = "output", short = "o", parse(from_os_str))]
     output: Option<PathBuf>,
@@ -106,9 +96,7 @@ impl<'a> CommandOptions<'a> {
 
         Ok(CommandOptions {
             args: &opts.args,
-            workdir: dunce::canonicalize(&opts.workdir).with_context(|_| {
-                format!("failed to canonicalize path '{}'", opts.workdir.display())
-            })?,
+            workdir: env::current_dir().context("failed to get current directory")?,
             env,
         })
     }
@@ -126,7 +114,6 @@ impl<'a> CommandOptions<'a> {
     {
         let mut child = Command::new(&self.args[0])
             .args(&self.args[1..])
-            .current_dir(&self.workdir)
             .stderr(Stdio::inherit())
             .stdout(Stdio::piped())
             .spawn_async()
