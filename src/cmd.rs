@@ -63,7 +63,7 @@ pub fn run(opts: &Opts, config: Config) -> Result<i32> {
     let status = command.spawn(handle_stdout, handle_stderr)?.wait()?;
 
     logger::finish_progress();
-    writer.finish()?;
+    writer.finish(status.success())?;
 
     if !status.success() {
         log::error!("process '{}' exited unsuccessfully ({})", command, status);

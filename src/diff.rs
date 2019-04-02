@@ -73,10 +73,14 @@ impl Writer {
         Ok(())
     }
 
-    pub fn finish(&mut self) -> Result<()> {
-        self.file.seek(SeekFrom::Start(0))?;
-        self.file.set_len(0)?;
-        self.curr.finish(&self.file, &self.path)
+    pub fn finish(&mut self, success: bool) -> Result<()> {
+        if success || self.orig.is_none() {
+            self.file.seek(SeekFrom::Start(0))?;
+            self.file.set_len(0)?;
+            self.curr.finish(&self.file, &self.path)?;
+        }
+
+        Ok(())
     }
 }
 
