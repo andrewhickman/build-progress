@@ -54,7 +54,13 @@ pub fn run(opts: &Opts, config: Config) -> Result<i32> {
         Ok(())
     });
 
-    let status = command.spawn(handle_stdout)?.wait()?;
+    let handle_stderr = map_err(|line: Vec<u8>| {
+        write_output(&line, &output, &output_path)?;
+        logger::log_bytes(&line);
+        Ok(())
+    });
+
+    let status = command.spawn(handle_stdout, handle_stderr)?.wait()?;
 
     logger::finish_progress();
     writer.finish()?;
@@ -105,21 +111,24 @@ impl<'a> CommandOptions<'a> {
         hash(self)
     }
 
-    fn spawn<O>(
+    fn spawn<O, E>(
         &self,
         out: O,
+        err: E,
     ) -> Result<impl Future<Item = ExitStatus, Error = io::Error>>
     where
         O: FnMut(Vec<u8>) -> io::Result<()>,
+        E: FnMut(Vec<u8>) -> io::Result<()>,
     {
         let mut child = Command::new(&self.args[0])
             .args(&self.args[1..])
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn_async()
             .with_context(|_| format!("failed to execute process '{}'", self))?;
         let stdout = lines(child.stdout().take().unwrap()).for_each(out);
-        Ok(child.join(stdout).map(|(status, ())| status))
+        let stderr = lines(child.stderr().take().unwrap()).for_each(err);
+        Ok(child.join3(stdout, stderr).map(|(status, (), ())| status))
     }
 }
 

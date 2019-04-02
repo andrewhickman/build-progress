@@ -16,7 +16,14 @@ where
     B: AsRef<[u8]>,
 {
     if log::max_level() >= log::Level::Info {
-        LOGGER.write_raw(String::from_utf8_lossy(bytes.as_ref()))
+        let mut bytes = bytes.as_ref();
+        if bytes.ends_with(b"\n") {
+            bytes = &bytes[..bytes.len() - 1];
+        }
+        if bytes.ends_with(b"\r") {
+            bytes = &bytes[..bytes.len() - 1];
+        }
+        LOGGER.write_raw(String::from_utf8_lossy(bytes));
     }
 }
 
