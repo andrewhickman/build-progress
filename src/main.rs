@@ -38,10 +38,10 @@ fn main() {
 fn run() -> Result<i32> {
     let opts = Opts::from_args();
     logger::init(opts.logger);
-    log::trace!("Options: {:#?}", opts);
+    log::trace!("options: {:#?}", opts);
 
     let config = config::read(&opts.config)?;
-    log::trace!("Config: {:#?}", config);
+    log::trace!("config: {:#?}", config);
 
     cmd::run(&opts.cmd, config)
 }

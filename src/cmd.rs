@@ -1,3 +1,6 @@
+use failure::{bail, ResultExt};
+use futures::{Future, Poll, Stream};
+use indicatif::HumanDuration;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
@@ -6,9 +9,6 @@ use std::fs::{self, File};
 use std::io::{self, prelude::*, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use failure::{bail, ResultExt};
-use futures::{Future, Poll, Stream};
-use indicatif::HumanDuration;
 use structopt::StructOpt;
 use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
@@ -21,7 +21,7 @@ use crate::Result;
 
 pub fn run(opts: &Opts, config: Config) -> Result<i32> {
     let command = CommandOptions::new(opts, config)?;
-    log::trace!("Command: {:#?}", command);
+    log::trace!("command: {:#?}", command);
 
     let dir = if let Some(dir) = dirs::data_dir() {
         dir.join(env!("CARGO_PKG_NAME")).join(command.hash())
@@ -68,7 +68,7 @@ pub fn run(opts: &Opts, config: Config) -> Result<i32> {
     if !status.success() {
         log::error!("process '{}' exited unsuccessfully ({})", command, status);
     }
-    log::info!("Output log file is located at '{}'", output_path.display());
+    log::info!("output log file is located at '{}'", output_path.display());
 
     Ok(status.code().unwrap_or(1))
 }

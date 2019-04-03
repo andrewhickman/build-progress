@@ -120,7 +120,10 @@ impl Logger {
         }
     }
 
-    fn write_raw<S>(&self, msg: S) where S: Into<String> + AsRef<str> {
+    fn write_raw<S>(&self, msg: S)
+    where
+        S: Into<String> + AsRef<str>,
+    {
         if self.progress.is_hidden() {
             self.term.write_line(msg.as_ref()).ok();
         } else {

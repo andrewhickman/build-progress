@@ -38,7 +38,7 @@ pub fn read(opts: &Opts) -> Result<Config> {
             .with_extension("toml");
         (Cow::Owned(path), false)
     } else {
-        log::debug!("Unable to resolve config path");
+        log::debug!("unable to resolve config path");
         return Ok(Config::default());
     };
 
@@ -46,7 +46,7 @@ pub fn read(opts: &Opts) -> Result<Config> {
         Ok(file) => file,
         Err(ref err) if !required && err.kind() == io::ErrorKind::NotFound => {
             log::debug!(
-                "Failed to open config file '{}': {}",
+                "failed to open config file '{}': {}",
                 config_path.display(),
                 err
             );
@@ -62,7 +62,7 @@ pub fn read(opts: &Opts) -> Result<Config> {
         }
     };
 
-    log::debug!("Reading config from file '{}'", config_path.display());
+    log::debug!("reading config from file '{}'", config_path.display());
     let config = toml::from_str(&config_file)
         .with_context(|_| format!("failed to read TOML file '{}'", config_path.display()))?;
     Ok(config)

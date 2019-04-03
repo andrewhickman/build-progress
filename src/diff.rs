@@ -22,7 +22,7 @@ pub struct Writer {
 impl Writer {
     pub fn new(dir: &Path) -> Result<Self> {
         let path = dir.join("orig").with_extension("json");
-        log::debug!("Opening or creating data file '{}'", path.display());
+        log::debug!("opening or creating data file '{}'", path.display());
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -75,6 +75,8 @@ impl Writer {
 
     pub fn finish(&mut self, success: bool) -> Result<()> {
         if success || self.orig.is_none() {
+            log::debug!("saving process output to file '{}'", self.path.display());
+            log::trace!("current output: {:#?}", self.curr);
             self.file.seek(SeekFrom::Start(0))?;
             self.file.set_len(0)?;
             self.curr.finish(&self.file, &self.path)?;
@@ -108,7 +110,7 @@ impl OrigOutput {
         } else {
             let mut data: OutputData = json::from_reader(BufReader::new(file))
                 .with_context(|_| format!("failed to read JSON file '{}'", path.display()))?;
-            log::trace!("Original output: {:#?}", data);
+            log::trace!("original output: {:#?}", data);
             let map = data
                 .lines
                 .iter_mut()
@@ -127,9 +129,9 @@ impl OrigOutput {
     fn write_line(&mut self, line: &[u8]) {
         if let Some(&seq) = self.map.get(line) {
             if self.seq <= seq {
-                log::trace!("Recognized line '{}'", String::from_utf8_lossy(line));
+                log::trace!("recognized line '{}'", String::from_utf8_lossy(line));
                 self.elapsed = self.data.lines[seq as usize].dur;
-                log::trace!("Elapsed: {:#}", indicatif::HumanDuration(self.elapsed));
+                log::trace!("elapsed: {:#}", indicatif::HumanDuration(self.elapsed));
             }
 
             self.seq += 1;
