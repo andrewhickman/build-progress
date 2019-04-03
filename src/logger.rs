@@ -91,7 +91,11 @@ impl Logger {
         let progress = ProgressBar::hidden();
         progress.set_style(
             ProgressStyle::default_bar()
-                .template("[{bar:64.white}] {elapsed}/{msg}")
+                .template(&format!(
+                    "[{{bar:64.bold}}] {}: {{elapsed:bold}} / {}: {{msg:bold}}",
+                    style("elapsed").green(),
+                    style("total").green(),
+                ))
                 .progress_chars("=> "),
         );
         Logger {
@@ -133,7 +137,7 @@ impl Log for Logger {
     fn log(&self, record: &log::Record) {
         if self.enabled(&record.metadata()) {
             let prefix = match record.level() {
-                log::Level::Trace => style("trace").white(),
+                log::Level::Trace => style("trace").bold(),
                 log::Level::Debug => style("debug").cyan(),
                 log::Level::Info => style("info").blue(),
                 log::Level::Warn => style("warning").yellow(),
