@@ -3,6 +3,7 @@ mod config;
 mod diff;
 mod hash;
 mod logger;
+mod output;
 
 use std::process;
 

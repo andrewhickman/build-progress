@@ -35,6 +35,10 @@ pub fn start_progress(len: u64, msg: &str) {
     LOGGER.progress.set_message(msg);
 }
 
+pub fn tick_progress_bar() {
+    LOGGER.progress.tick();
+}
+
 pub fn set_progress_position(pos: u64) {
     LOGGER.progress.set_position(pos);
 }

@@ -1,74 +1,72 @@
-use failure::{bail, ResultExt};
-use futures::{Future, Poll, Stream};
-use indicatif::HumanDuration;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{self, File};
 use std::io::{self, prelude::*, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::Arc;
+use std::time::Duration;
 use structopt::StructOpt;
+
+use failure::ResultExt;
+use futures::future::Either;
+use futures::prelude::*;
+use indicatif::HumanDuration;
+use tokio::runtime::Runtime;
+use tokio::timer::Interval;
 use tokio_io::{try_nb, AsyncRead};
 use tokio_process::CommandExt;
 
 use crate::config::Config;
-use crate::diff;
 use crate::hash::hash;
 use crate::logger;
+use crate::output;
 use crate::Result;
 
 pub fn run(opts: &Opts, config: Config) -> Result<i32> {
     let command = CommandOptions::new(opts, config)?;
     log::trace!("command: {:#?}", command);
 
-    let dir = if let Some(dir) = dirs::data_dir() {
-        dir.join(env!("CARGO_PKG_NAME")).join(command.hash())
-    } else {
-        bail!("failed to get user's data directory");
-    };
-
-    fs::create_dir_all(&dir)
-        .with_context(|_| format!("failed to create directory '{}'", dir.display()))?;
-
-    let mut writer = diff::Writer::new(&dir)?;
-    if let Some(len) = writer.len() {
+    let mut output = output::Writer::new(opts, &command)?;
+    let progress_ticker = if let Some(len) = output.diff().len() {
         let msg = format!("{:#}", HumanDuration(len));
         logger::start_progress(len.as_millis() as u64, &msg);
-    }
-
-    let output_path = if let Some(output) = &opts.output {
-        command.workdir.join(output)
+        Some(
+            Interval::new_interval(Duration::from_millis(200))
+                .for_each(|_| Ok(logger::tick_progress_bar())),
+        )
     } else {
-        dir.join("output").with_extension("log")
+        None
     };
-    let output = File::create(&output_path)
-        .with_context(|_| format!("failed to create file '{}'", output_path.display()))?;
 
-    let handle_stdout = map_err(|line: Vec<u8>| {
-        write_output(&line, &output, &output_path)?;
-        logger::log_bytes(&line);
-        writer.write_line(line)?;
-        logger::set_progress_position(writer.completed().as_millis() as u64);
-        Ok(())
-    });
+    let mut rt = Runtime::new()?;
+    let output = Arc::new(output);
+    let (output1, output2) = (output.clone(), output.clone());
+    let status_fut = command.spawn(
+        map_err(move |line| output1.write_stdout(line)),
+        map_err(move |line| output2.write_stderr(line)),
+    )?;
+    let status = if let Some(ticker) = progress_ticker {
+        match rt.block_on(status_fut.select2(ticker)) {
+            Ok(Either::A((status, _))) => status,
+            Ok(Either::B(_)) => unreachable!(),
+            Err(Either::A((err, _))) => return Err(err.into()),
+            Err(Either::B((err, _))) => return Err(err.into()),
+        }
+    } else {
+        rt.block_on(status_fut)?
+    };
 
-    let handle_stderr = map_err(|line: Vec<u8>| {
-        write_output(&line, &output, &output_path)?;
-        logger::log_bytes(&line);
-        Ok(())
-    });
-
-    let status = command.spawn(handle_stdout, handle_stderr)?.wait()?;
-
-    logger::finish_progress();
-    writer.finish(status.success())?;
+    output.finish(status.success())?;
 
     if !status.success() {
         log::error!("process '{}' exited unsuccessfully ({})", command, status);
     }
-    log::info!("output log file is located at '{}'", output_path.display());
+    log::info!(
+        "output log file is located at '{}'",
+        output.path().display()
+    );
 
     Ok(status.code().unwrap_or(1))
 }
@@ -77,17 +75,17 @@ pub fn run(opts: &Opts, config: Config) -> Result<i32> {
 pub struct Opts {
     /// The command to run
     #[structopt(name = "COMMAND", required = true, parse(from_os_str))]
-    args: Vec<OsString>,
+    pub args: Vec<OsString>,
     /// The file to pipe the command to, relative to workdir
     #[structopt(name = "OUTPUT", long = "output", short = "o", parse(from_os_str))]
-    output: Option<PathBuf>,
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Debug, Hash)]
 pub struct CommandOptions<'a> {
-    args: &'a [OsString],
-    workdir: PathBuf,
-    env: BTreeMap<String, OsString>,
+    pub args: &'a [OsString],
+    pub workdir: PathBuf,
+    pub env: BTreeMap<String, OsString>,
 }
 
 impl<'a> CommandOptions<'a> {
@@ -170,12 +168,6 @@ where
         }
         Ok(Some(line).into())
     }
-}
-
-fn write_output(line: &[u8], mut file: &File, path: &Path) -> Result<()> {
-    Ok(file
-        .write_all(line)
-        .with_context(|_| format!("failed to write to file '{}'", path.display()))?)
 }
 
 fn map_err<A, R>(mut f: impl FnMut(A) -> Result<R>) -> impl FnMut(A) -> io::Result<R> {
