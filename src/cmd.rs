@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
@@ -81,9 +82,9 @@ pub struct Opts {
     pub output: Option<PathBuf>,
 }
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CommandOptions<'a> {
-    pub args: &'a [OsString],
+    pub args: Cow<'a, [OsString]>,
     pub workdir: PathBuf,
     pub env: BTreeMap<String, OsString>,
 }
@@ -99,7 +100,7 @@ impl<'a> CommandOptions<'a> {
             .collect();
 
         Ok(CommandOptions {
-            args: &opts.args,
+            args: Cow::Borrowed(&opts.args),
             workdir: env::current_dir().context("failed to get current directory")?,
             env,
         })

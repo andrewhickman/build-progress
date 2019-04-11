@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::{File, Metadata, OpenOptions};
 use std::path::Path;
 
 use failure::ResultExt;
@@ -28,8 +28,9 @@ impl Into<File> for FileEntry {
     }
 }
 
-pub fn open_or_create<P>(path: P) -> Result<FileEntry>
-where P: AsRef<Path>
+pub fn open_or_create<P>(path: P) -> Result<(FileEntry, Metadata)>
+where
+    P: AsRef<Path>,
 {
     let path = path.as_ref();
     let file = OpenOptions::new()
@@ -42,8 +43,8 @@ where P: AsRef<Path>
         .metadata()
         .with_context(|_| format!("failed to get metadata for file '{}'", path.display()))?;
     if meta.len() == 0 {
-        Ok(FileEntry::New(file))
+        Ok((FileEntry::New(file), meta))
     } else {
-        Ok(FileEntry::Existing(file))
+        Ok((FileEntry::Existing(file), meta))
     }
 }

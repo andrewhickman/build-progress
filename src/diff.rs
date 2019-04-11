@@ -10,8 +10,8 @@ use failure::{bail, Fail, ResultExt};
 use fs2::{self, FileExt};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::Result;
 use crate::util::{open_or_create, FileEntry};
+use crate::Result;
 
 pub struct Writer {
     file: File,
@@ -25,7 +25,7 @@ impl Writer {
         let path = dir.join("orig").with_extension("json");
         log::debug!("opening or creating data file '{}'", path.display());
 
-        let file = open_or_create(&path)?;
+        let (file, _) = open_or_create(&path)?;
         match file.as_ref().try_lock_exclusive() {
             Ok(()) => (),
             Err(ref err) if err.kind() == fs2::lock_contended_error().kind() => bail!(

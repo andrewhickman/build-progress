@@ -1,11 +1,12 @@
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use failure::{bail, ResultExt};
 
 use crate::cmd::{self, CommandOptions};
+use crate::util::{open_or_create, FileEntry};
 use crate::{diff, logger, Result};
 
 pub struct Writer {
@@ -24,16 +25,38 @@ impl Writer {
 
         fs::create_dir_all(&dir)
             .with_context(|_| format!("failed to create directory '{}'", dir.display()))?;
+
+        let command_path = dir.join("command").with_extension("toml");
+        let (command_file, meta) = open_or_create(&command_path)?;
+        match command_file {
+            FileEntry::Existing(file) => {
+                if let Err(err) = check_eq(&file, &command_path, meta, cmd) {
+                    log::warn!("{}", crate::fmt_error(&err));
+                }
+            }
+            FileEntry::New(mut file) => {
+                let string = toml::to_string_pretty(&cmd)?;
+                file.write_all(string.as_bytes()).with_context(|_| {
+                    format!("failed to write to file '{}'", command_path.display())
+                })?;
+            }
+        };
+
         let path = if let Some(path) = &opts.output {
             cmd.workdir.join(path)
         } else {
             dir.join("output").with_extension("log")
         };
-        let file = File::create(&path)
+
+        let output_file = File::create(&path)
             .with_context(|_| format!("failed to create file '{}'", path.display()))?;
         let diff = Mutex::new(diff::Writer::new(&dir)?);
 
-        Ok(Writer { file, path, diff })
+        Ok(Writer {
+            file: output_file,
+            path,
+            diff,
+        })
     }
 
     pub fn diff(&mut self) -> &mut diff::Writer {
@@ -70,4 +93,25 @@ impl Writer {
         logger::finish_progress();
         self.diff.lock().unwrap().finish(success)
     }
+}
+
+fn check_eq(
+    mut file: &File,
+    path: &Path,
+    meta: fs::Metadata,
+    curr_cmd: &CommandOptions,
+) -> Result<()> {
+    let mut buf = String::with_capacity(meta.len() as usize);
+    file.read_to_string(&mut buf)
+        .with_context(|_| format!("failed to read file '{}'", path.display()))?;
+    let prev_cmd: CommandOptions = toml::from_str(&buf)
+        .with_context(|_| format!("failed to parse TOML from file '{}'", path.display()))?;
+    if curr_cmd != &prev_cmd {
+        bail!(
+            "hash collision: previous command '{}' not equal to current command '{}'",
+            prev_cmd,
+            curr_cmd
+        );
+    }
+    Ok(())
 }
