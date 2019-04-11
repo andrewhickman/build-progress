@@ -27,20 +27,11 @@ impl Writer {
             .with_context(|_| format!("failed to create directory '{}'", dir.display()))?;
 
         let command_path = dir.join("command").with_extension("toml");
+        log::debug!("opening or creating command file '{}'", command_path.display());
         let (command_file, meta) = open_or_create(&command_path)?;
-        match command_file {
-            FileEntry::Existing(file) => {
-                if let Err(err) = check_eq(&file, &command_path, meta, cmd) {
-                    log::warn!("{}", crate::fmt_error(&err));
-                }
-            }
-            FileEntry::New(mut file) => {
-                let string = toml::to_string_pretty(&cmd)?;
-                file.write_all(string.as_bytes()).with_context(|_| {
-                    format!("failed to write to file '{}'", command_path.display())
-                })?;
-            }
-        };
+        if let Err(err) = check_cmd(&command_file, &command_path, meta, cmd) {
+            log::warn!("{}", crate::fmt_error(&err));
+        }
 
         let path = if let Some(path) = &opts.output {
             cmd.workdir.join(path)
@@ -95,23 +86,36 @@ impl Writer {
     }
 }
 
-fn check_eq(
-    mut file: &File,
+fn check_cmd(
+    file: &FileEntry,
     path: &Path,
     meta: fs::Metadata,
     curr_cmd: &CommandOptions,
 ) -> Result<()> {
-    let mut buf = String::with_capacity(meta.len() as usize);
-    file.read_to_string(&mut buf)
-        .with_context(|_| format!("failed to read file '{}'", path.display()))?;
-    let prev_cmd: CommandOptions = toml::from_str(&buf)
-        .with_context(|_| format!("failed to parse TOML from file '{}'", path.display()))?;
-    if curr_cmd != &prev_cmd {
-        bail!(
-            "hash collision: previous command '{}' not equal to current command '{}'",
-            prev_cmd,
-            curr_cmd
-        );
+    match file {
+        FileEntry::Existing(file) => {
+            let mut file = file;
+            let mut string = String::with_capacity(meta.len() as usize);
+            file.read_to_string(&mut string)
+                .with_context(|_| format!("failed to read file '{}'", path.display()))?;
+            let prev_cmd: CommandOptions = toml::from_str(&string)
+                .with_context(|_| format!("failed to parse TOML from file '{}'", path.display()))?;
+            log::trace!("previous command: {:#?}", prev_cmd);
+            if *curr_cmd != prev_cmd {
+                bail!(
+                    "hash collision: previous command '{}' not equal to current command '{}'",
+                    prev_cmd,
+                    curr_cmd
+                );
+            }
+        }
+        FileEntry::New(file) => {
+            let mut file = file;
+            let string = toml::to_string_pretty(curr_cmd)?;
+            file.write_all(string.as_bytes()).with_context(|_| {
+                format!("failed to write to file '{}'", path.display())
+            })?;
+        }
     }
     Ok(())
 }

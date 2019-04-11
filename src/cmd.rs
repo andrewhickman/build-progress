@@ -84,8 +84,10 @@ pub struct Opts {
 
 #[derive(Debug, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CommandOptions<'a> {
+    #[serde(with = "serde_args")]
     pub args: Cow<'a, [OsString]>,
     pub workdir: PathBuf,
+    #[serde(with = "serde_env")]
     pub env: BTreeMap<String, OsString>,
 }
 
@@ -173,4 +175,65 @@ where
 
 fn map_err<A, R>(mut f: impl FnMut(A) -> Result<R>) -> impl FnMut(A) -> io::Result<R> {
     move |a| f(a).map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+}
+
+mod serde_args {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::borrow::Cow;
+    use std::ffi::OsString;
+
+    pub(super) fn serialize<S>(val: &Cow<'_, [OsString]>, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::{Error, SerializeSeq};
+
+        let mut ser = ser.serialize_seq(Some(val.len()))?;
+        for s in val.iter() {
+            if let Some(s) = s.to_str() {
+                ser.serialize_element(s)?;
+            } else {
+                return Err(S::Error::custom("unpaired surrogate in string"))
+            }
+        }
+        ser.end()
+    }
+
+    pub(super) fn deserialize<'de, D>(de: D) -> Result<Cow<'static, [OsString]>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Vec::<String>::deserialize(de).map(|s| s.into_iter().map(OsString::from).collect())
+    }
+}
+
+mod serde_env {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::collections::BTreeMap;
+    use std::ffi::OsString;
+
+    pub(super) fn serialize<S>(val: &BTreeMap<String, OsString>, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::{Error, SerializeMap};
+
+        let mut ser = ser.serialize_map(Some(val.len()))?;
+        for (k, s) in val.iter() {
+            if let Some(s) = s.to_str() {
+                ser.serialize_entry(k, s)?;
+            } else {
+                return Err(S::Error::custom("unpaired surrogate in string"))
+            }
+        }
+        ser.end()
+    }
+
+    pub(super) fn deserialize<'de, D>(de: D) -> Result<BTreeMap<String, OsString>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        BTreeMap::<String, String>::deserialize(de)
+            .map(|s| s.into_iter().map(|(k, s)| (k, OsString::from(s))).collect())
+    }
 }

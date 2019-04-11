@@ -23,7 +23,7 @@ pub struct Writer {
 impl Writer {
     pub fn new(dir: &Path) -> Result<Self> {
         let path = dir.join("orig").with_extension("json");
-        log::debug!("opening or creating data file '{}'", path.display());
+        log::debug!("opening or creating output file '{}'", path.display());
 
         let (file, _) = open_or_create(&path)?;
         match file.as_ref().try_lock_exclusive() {
