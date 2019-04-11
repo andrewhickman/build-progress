@@ -1,6 +1,6 @@
 use std::collections::hash_map::{Entry, HashMap};
 use std::fmt;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{prelude::*, BufReader, SeekFrom};
 use std::mem::replace;
 use std::path::{Path, PathBuf};
@@ -11,6 +11,7 @@ use fs2::{self, FileExt};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::Result;
+use crate::util::{open_or_create, FileEntry};
 
 pub struct Writer {
     file: File,
@@ -23,14 +24,9 @@ impl Writer {
     pub fn new(dir: &Path) -> Result<Self> {
         let path = dir.join("orig").with_extension("json");
         log::debug!("opening or creating data file '{}'", path.display());
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(&path)
-            .with_context(|_| format!("failed to open or create file '{}'", path.display()))?;
 
-        match file.try_lock_exclusive() {
+        let file = open_or_create(&path)?;
+        match file.as_ref().try_lock_exclusive() {
             Ok(()) => (),
             Err(ref err) if err.kind() == fs2::lock_contended_error().kind() => bail!(
                 "file '{}' is being accessed by another process",
@@ -45,7 +41,7 @@ impl Writer {
 
         let orig = OrigOutput::new(&file, &path)?;
         Ok(Writer {
-            file,
+            file: file.into(),
             path,
             orig,
             curr: CurrOutput::new(),
@@ -101,13 +97,8 @@ struct OrigOutput {
 }
 
 impl OrigOutput {
-    fn new(file: &File, path: &Path) -> Result<Option<Self>> {
-        let meta = file
-            .metadata()
-            .with_context(|_| format!("failed to get metadata for file '{}'", path.display()))?;
-        if meta.len() == 0 {
-            Ok(None)
-        } else {
+    fn new(file: &FileEntry, path: &Path) -> Result<Option<Self>> {
+        if let FileEntry::Existing(file) = file {
             let mut data: OutputData = json::from_reader(BufReader::new(file))
                 .with_context(|_| format!("failed to read JSON file '{}'", path.display()))?;
             log::trace!("original output: {:#?}", data);
@@ -123,6 +114,8 @@ impl OrigOutput {
                 seq: 0,
                 elapsed: Duration::from_secs(0),
             }))
+        } else {
+            Ok(None)
         }
     }
 

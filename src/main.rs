@@ -4,6 +4,7 @@ mod diff;
 mod hash;
 mod logger;
 mod output;
+mod util;
 
 use std::process;
 
