@@ -17,7 +17,7 @@ Get-Date -Format FileDateTimeUniversal
 10
 11
 Get-Date -Format FileDateTimeUniversal
-Start-Sleep 5
+Start-Sleep 2
 12
 13
 Start-Sleep 1
@@ -84,7 +84,7 @@ Start-Sleep 1
 58
 59
 Write-Error ZZZZZZZZZZ
-Start-Sleep 10
+Start-Sleep 3
 60
 61
 62
@@ -153,15 +153,15 @@ Get-Date -Format FileDateTimeUniversal
 116
 117
 118
-Start-Sleep 8
+Start-Sleep 3
 119
 Start-Sleep 2
 120
 Write-Error ZZZZZ
-Start-Sleep 5
+Start-Sleep 2
 121
 Write-Error ZZZZZZZZZZ
-Start-Sleep 10
+Start-Sleep 3
 122
 Start-Sleep 1
 123
